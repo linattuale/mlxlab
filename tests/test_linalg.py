@@ -120,3 +120,50 @@ assert ml.linalg.cond(mx.array([[1.,0.],[0.,1e-6]])).item() > 1e5
 print("OK")
 """)
     assert out == "OK"
+
+
+def test_cond_singular():
+    out = _run_check("""
+import mlx.core as mx; import mlxlab as ml; import math
+c = ml.linalg.cond(mx.array([[1.,2.],[2.,4.]])).item()
+assert math.isinf(c), f"Expected inf, got {c}"
+print("OK")
+""")
+    assert out == "OK"
+
+
+def test_det_non_square():
+    out = _run_check("""
+import mlx.core as mx; import mlxlab as ml
+try:
+    ml.linalg.det(mx.array([[1.,2.,3.],[4.,5.,6.]]))
+    print("FAIL")
+except ValueError:
+    print("OK")
+""")
+    assert out == "OK"
+
+
+def test_slogdet_non_square():
+    out = _run_check("""
+import mlx.core as mx; import mlxlab as ml
+try:
+    ml.linalg.slogdet(mx.array([[1.,2.,3.]]))
+    print("FAIL")
+except ValueError:
+    print("OK")
+""")
+    assert out == "OK"
+
+
+def test_lstsq_rank_deficient():
+    out = _run_check("""
+import mlx.core as mx; import mlxlab as ml; import numpy as np
+A = mx.array([[1.,1.],[1.,1.],[1.,1.]])
+b = mx.array([2.,2.,2.])
+x = ml.linalg.lstsq(A, b)
+# Minimum-norm solution: x = [1, 1] (equal split)
+assert abs(x[0].item() - 1.0) < 0.1 and abs(x[1].item() - 1.0) < 0.1, f"x={[x[i].item() for i in range(2)]}"
+print("OK")
+""")
+    assert out == "OK"

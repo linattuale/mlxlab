@@ -81,6 +81,32 @@ def test_spectrogram_shape():
     assert freqs.shape[0] == n_freqs
 
 
+def test_psd_odd_length():
+    """Odd-length PSD should not halve the last bin (no Nyquist)."""
+    # 7-sample signal: rfft returns 4 bins, none is Nyquist
+    x = mx.array([1.0, 0.0, -1.0, 0.0, 1.0, 0.0, -1.0])
+    freqs, power = ml.signal.psd(x, fs=1.0, window=False)
+    assert freqs.shape[0] == 4  # n//2+1 = 4 for n=7
+    # Last bin should NOT be halved (it's not Nyquist)
+    # Verify by checking it's nonzero
+    assert power[-1].item() > 0
+
+
+def test_welch_invalid_overlap():
+    with pytest.raises(ValueError, match="noverlap"):
+        ml.signal.welch(mx.random.normal((1000,)), nperseg=256, noverlap=256)
+
+
+def test_welch_short_signal():
+    with pytest.raises(ValueError, match="Signal length"):
+        ml.signal.welch(mx.random.normal((100,)), nperseg=256)
+
+
+def test_spectrogram_invalid_nperseg():
+    with pytest.raises(ValueError, match="nperseg"):
+        ml.signal.spectrogram(mx.random.normal((1000,)), nperseg=0)
+
+
 def test_spectrogram_chirp():
     """Spectrogram of a chirp should show increasing frequency over time."""
     fs = 1000.0

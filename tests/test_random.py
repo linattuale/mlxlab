@@ -134,3 +134,53 @@ def test_binomial_range():
     mx.eval(samples)
     assert mx.all(samples >= 0).item() and mx.all(samples <= n).item(), \
         f"Binomial samples should be in [0, {n}]"
+
+
+# ---- key independence --------------------------------------------------------
+
+def test_keyed_beta_not_constant():
+    """Explicit key should produce varied samples, not collapse to 0.5."""
+    key = mx.random.key(123)
+    samples = ml.random.beta(2.0, 2.0, shape=(100,), key=key)
+    mx.eval(samples)
+    assert float(mx.std(samples).item()) > 0.01, "Keyed beta collapsed to constant"
+
+
+def test_keyed_binomial_varied():
+    key = mx.random.key(456)
+    samples = ml.random.binomial(20, 0.5, shape=(100,), key=key)
+    mx.eval(samples)
+    unique = len(set(int(samples[i].item()) for i in range(100)))
+    assert unique > 3, f"Keyed binomial produced only {unique} unique values"
+
+
+# ---- parameter validation ----------------------------------------------------
+
+def test_exponential_negative_scale():
+    with pytest.raises(ValueError, match="scale must be > 0"):
+        ml.random.exponential(scale=-1.0, shape=(10,))
+
+
+def test_gamma_negative_scale():
+    with pytest.raises(ValueError, match="scale must be > 0"):
+        ml.random.gamma(2.0, scale=-1.0, shape=(10,))
+
+
+def test_poisson_zero():
+    samples = ml.random.poisson(lam=0.0, shape=(10,))
+    mx.eval(samples)
+    assert mx.all(samples == 0).item(), "Poisson(0) should always return 0"
+
+
+# ---- integer dtype -----------------------------------------------------------
+
+def test_poisson_dtype():
+    samples = ml.random.poisson(lam=5.0, shape=(10,))
+    mx.eval(samples)
+    assert samples.dtype == mx.int32, f"Expected int32, got {samples.dtype}"
+
+
+def test_binomial_dtype():
+    samples = ml.random.binomial(10, 0.5, shape=(10,))
+    mx.eval(samples)
+    assert samples.dtype == mx.int32, f"Expected int32, got {samples.dtype}"
