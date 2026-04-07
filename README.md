@@ -107,17 +107,67 @@ MersenneTwister vs MATLAB default) so the specific chaotic trajectory differs,
 but the statistical properties (spectral radius, chaos strength) are equivalent.
 Scripts are in `benchmarks/`.
 
+## Additional Modules
+
+### mlxlab.linalg
+
+Functions that MLX doesn't ship, built on its CPU-only decompositions (lu, qr, svd):
+
+```python
+import mlxlab as ml
+
+ml.linalg.det(A)            # determinant (via SVD + LU)
+ml.linalg.slogdet(A)        # sign and log-abs-determinant
+ml.linalg.lstsq(A, b)       # minimum-norm least-squares (via pseudoinverse)
+ml.linalg.matrix_rank(A)    # numerical rank (via SVD)
+ml.linalg.cond(A)           # 2-norm condition number (returns inf for singular)
+```
+
+Note: MLX 0.31's decompositions are CPU-only. Results live in unified memory and
+can be used in subsequent GPU operations. For operations MLX already provides
+(eig, svd, cholesky, solve, inv, etc.), use `mlx.core.linalg` directly.
+
+### mlxlab.signal
+
+FFT-based spectral analysis built on `mlx.core.fft`:
+
+```python
+import mlxlab as ml
+
+freqs = ml.signal.fftfreq(n, d=1/fs)
+freqs, power = ml.signal.psd(x, fs=1000)
+freqs, power = ml.signal.welch(x, fs=1000, nperseg=256)
+times, freqs, Sxx = ml.signal.spectrogram(x, fs=1000, nperseg=256)
+```
+
+### mlxlab.random
+
+Distributions that MLX doesn't ship, built on `mlx.core.random`:
+
+```python
+import mlxlab as ml
+
+ml.random.exponential(shape=(1000,), scale=2.0)
+ml.random.gamma(shape_param=5.0, scale=2.0, shape=(1000,))
+ml.random.beta(a=2.0, b=5.0, shape=(1000,))
+ml.random.poisson(lam=3.0, shape=(1000,))       # returns int32
+ml.random.binomial(n=20, p=0.3, shape=(1000,))  # returns int32
+```
+
+Supports explicit PRNG keys via `key=` for reproducibility (keys are split
+internally to ensure independence across draws).
+
 ## Roadmap (v0.2)
 
 - **Compiled integration loop** -- push the time-stepping loop into compiled MLX to
   eliminate per-step Python/`mx.eval()` overhead. This is the main bottleneck at
   small N (the ~0.12s floor) and would extend mlxlab's advantage to smaller systems.
-- **`mlxlab.linalg`** -- sparse matrix support, eigenvalue solvers for stability
-  analysis.
-- **`mlxlab.signal`** -- FFT-based spectral analysis (MLX has `mx.fft`).
+- **Sparse matrices** -- no MLX foundation exists yet; major undertaking.
 - **Implicit/stiff solvers** -- BDF, SDIRK methods for stiff systems.
+- **Special functions** -- bessel, gamma function (may need custom Metal kernels).
+- **Interpolation** -- interp1d, splines.
 - **Dense output** -- continuous interpolation between solver steps.
-- **Benchmarks on M5 Ultra** when available.
+- **GPU linalg** -- when MLX ships GPU decompositions.
 
 ## License
 

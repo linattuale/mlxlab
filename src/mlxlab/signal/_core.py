@@ -71,9 +71,14 @@ def psd(x: mx.array, fs: float = 1.0, window: bool = True) -> tuple[mx.array, mx
 
     X = mx.fft.rfft(x)
     power = (mx.real(X) ** 2 + mx.imag(X) ** 2) / (fs * S2)
-    # Double one-sided (except DC and Nyquist)
+    # Double one-sided (except DC, and Nyquist only for even-length signals)
     power = power * 2.0
-    power = mx.concatenate([power[:1] / 2.0, power[1:-1], power[-1:] / 2.0])
+    if n % 2 == 0:
+        # Even: DC at [0], Nyquist at [-1] — don't double either
+        power = mx.concatenate([power[:1] / 2.0, power[1:-1], power[-1:] / 2.0])
+    else:
+        # Odd: DC at [0] only — no Nyquist bin
+        power = mx.concatenate([power[:1] / 2.0, power[1:]])
 
     freqs = rfftfreq(n, d=1.0 / fs)
     return freqs, power
@@ -90,14 +95,20 @@ def welch(
     Args:
         x: 1-D signal array.
         fs: Sampling frequency.
-        nperseg: Length of each segment. Default: 256.
-        noverlap: Number of overlapping samples. Default: nperseg // 2.
+        nperseg: Length of each segment (must be > 0). Default: 256.
+        noverlap: Number of overlapping samples (must be < nperseg). Default: nperseg // 2.
 
     Returns:
         (freqs, psd_estimate) averaged over segments.
     """
+    if nperseg <= 0:
+        raise ValueError(f"nperseg must be > 0, got {nperseg}")
     if noverlap is None:
         noverlap = nperseg // 2
+    if noverlap < 0 or noverlap >= nperseg:
+        raise ValueError(f"noverlap must be in [0, nperseg), got {noverlap}")
+    if x.shape[0] < nperseg:
+        raise ValueError(f"Signal length ({x.shape[0]}) must be >= nperseg ({nperseg})")
 
     step = nperseg - noverlap
     n_segments = (x.shape[0] - nperseg) // step + 1
@@ -127,14 +138,20 @@ def spectrogram(
     Args:
         x: 1-D signal array.
         fs: Sampling frequency.
-        nperseg: Length of each segment.
-        noverlap: Overlap between segments. Default: nperseg // 2.
+        nperseg: Length of each segment (must be > 0).
+        noverlap: Overlap between segments (must be < nperseg). Default: nperseg // 2.
 
     Returns:
         (times, freqs, Sxx) where Sxx has shape (n_segments, n_freqs).
     """
+    if nperseg <= 0:
+        raise ValueError(f"nperseg must be > 0, got {nperseg}")
     if noverlap is None:
         noverlap = nperseg // 2
+    if noverlap < 0 or noverlap >= nperseg:
+        raise ValueError(f"noverlap must be in [0, nperseg), got {noverlap}")
+    if x.shape[0] < nperseg:
+        raise ValueError(f"Signal length ({x.shape[0]}) must be >= nperseg ({nperseg})")
 
     step = nperseg - noverlap
     n_segments = (x.shape[0] - nperseg) // step + 1
