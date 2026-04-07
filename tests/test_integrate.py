@@ -199,3 +199,47 @@ def test_unknown_method():
 def test_fixed_step_requires_dt():
     with pytest.raises(ValueError, match="requires dt"):
         ml.integrate.solve(exp_decay, mx.array([1.0]), t_span=(0, 1), method="rk4")
+
+
+def test_reverse_time_span():
+    with pytest.raises(ValueError, match="t1 > t0"):
+        ml.integrate.solve(exp_decay, mx.array([1.0]), t_span=(1, 0), method="tsit5")
+
+
+def test_negative_dt():
+    with pytest.raises(ValueError, match="dt must be positive"):
+        ml.integrate.solve(exp_decay, mx.array([1.0]), t_span=(0, 1), dt=-0.01, method="rk4")
+
+
+def test_saveat_out_of_range():
+    with pytest.raises(ValueError, match="outside t_span"):
+        ml.integrate.solve(exp_decay, mx.array([1.0]), t_span=(0, 1), dt=0.1,
+                           method="rk4", saveat=mx.array([-0.5, 0.5]))
+
+
+def test_saveat_unsorted():
+    with pytest.raises(ValueError, match="saveat must be sorted"):
+        ml.integrate.solve(exp_decay, mx.array([1.0]), t_span=(0, 1), dt=0.1,
+                           method="rk4", saveat=mx.array([0.5, 0.2, 0.8]))
+
+
+def test_sde_saveat():
+    """SDE path should support saveat."""
+    saveat = mx.array([0.0, 0.5, 1.0])
+    sol = ml.integrate.solve(
+        exp_decay, mx.array([1.0]), t_span=(0, 1), dt=0.01,
+        method="euler_maruyama", saveat=saveat,
+    )
+    assert sol.t.shape[0] == 3
+
+
+def test_sde_no_duplicate_final_time():
+    """SDE with dt that divides T evenly should not duplicate final time."""
+    sol = ml.integrate.solve(
+        exp_decay, mx.array([1.0]), t_span=(0, 1), dt=0.1,
+        method="euler_maruyama",
+    )
+    t = [float(sol.t[i].item()) for i in range(sol.t.shape[0])]
+    # No duplicate times
+    for i in range(1, len(t)):
+        assert t[i] > t[i - 1] + 1e-12, f"Duplicate time at index {i}: {t[i-1]}, {t[i]}"

@@ -18,7 +18,7 @@ import mlxlab as ml
 def rhs(y, t):
     return -y
 
-# Solve with adaptive stepping (like MATLAB's ode45, but better)
+# Solve with adaptive stepping (Tsit5, same family as MATLAB's ode45)
 sol = ml.integrate.solve(rhs, mx.array([1.0]), t_span=(0, 5), method="tsit5")
 
 print(sol.y[-1])  # ~ exp(-5) = 0.006738
@@ -51,6 +51,9 @@ sol = ml.integrate.solve(network_rhs, mx.zeros(10000), t_span=(0, 1), dt=0.0001,
 | `dopri5` | Adaptive | MATLAB ode45 equivalent |
 | `euler_maruyama` | Fixed-step SDE | Stochastic systems |
 
+**Note:** The RHS convention is `f(y, t)` (state first), matching dynamical systems
+convention and MLX's array-first style. This differs from SciPy's `f(t, y)`.
+
 ## Benchmarks
 
 Dormand-Prince 5(4) adaptive solver across 6 frameworks, same tolerances
@@ -81,14 +84,15 @@ M5 Max (40 GPU cores, 128 GB).
 - **Step counts are consistent** across frameworks: ~140-180 steps for float32
   solvers, ~300-350 for float64 (SciPy/MATLAB), confirming the same algorithm
   is being solved.
-- **SciPy and MATLAB use float64 internally** (SciPy upcasts, MATLAB ode45 requires
-  double). This is disclosed, not corrected -- it reflects the real-world experience
-  of switching frameworks. MATLAB's higher step count (~2x) is a direct consequence of
-  stricter float64 error estimation at the same tolerances.
+- **SciPy and MATLAB use float64 internally** (SciPy upcasts; MATLAB ode45 operates
+  in double precision). This is disclosed, not corrected -- it reflects the real-world
+  experience of switching frameworks. MATLAB's higher step count (~2x) is a
+  consequence of float64 error estimation at the same tolerances.
 
-**Chaos verification:** The system was verified to be in the chaotic regime at all
-benchmark sizes. A 1e-6 perturbation to the initial conditions amplifies 43x (N=500),
-241x (N=1000), and 306x (N=2000) over T=1s, confirming positive Lyapunov exponents.
+**Chaos verification:** The system shows chaotic dynamics at all benchmark sizes.
+A 1e-6 perturbation to initial conditions amplifies 43x (N=500), 241x (N=1000),
+and 306x (N=2000) over T=1s, consistent with positive Lyapunov exponents (though
+this is a finite-time sensitivity check, not a rigorous exponent computation).
 The finite-size transition is visible at N=500 (weaker chaos) but all sizes show
 irregular, non-periodic dynamics.
 
@@ -97,8 +101,11 @@ irregular, non-periodic dynamics.
 **Methodology:** Each framework was benchmarked in a separate process, run
 sequentially (never in parallel). System load was verified idle (>70% CPU idle) via
 `top` between each run. Median of 5 runs (3 for N >= 16000), 1 warmup run. All
-benchmarks use the same random seed, same system, same tolerances, and save the
-full trajectory. Scripts are in `benchmarks/`.
+benchmarks use seed 42, same gain/tau/tolerances, and save the full trajectory.
+Note: the random matrix W differs across languages (NumPy PCG64 vs Julia
+MersenneTwister vs MATLAB default) so the specific chaotic trajectory differs,
+but the statistical properties (spectral radius, chaos strength) are equivalent.
+Scripts are in `benchmarks/`.
 
 ## Roadmap (v0.2)
 

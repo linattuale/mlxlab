@@ -127,12 +127,11 @@ def bench_scipy(N):
                          rtol=RTOL, atol=ATOL)
 
     sol = run()
-    # SciPy: sol.t has one entry per accepted step + initial
     n_steps = sol.t.shape[0] - 1
-    n_rejected = sol.nfev  # total RHS evals (includes rejected)
+    n_rhs_evals = sol.nfev
 
     med, std = time_fn(run)
-    return med, std, n_steps, n_rejected
+    return med, std, n_steps, n_rhs_evals
 
 
 # --------------------------------------------------------------------------- #
@@ -191,11 +190,11 @@ def load_results():
     return {}
 
 
-def save_result(framework, N, med, std, n_steps, n_rejected):
+def save_result(framework, N, med, std, n_steps, n_rhs_evals):
     results = load_results()
     results.setdefault(framework, {})[str(N)] = {
         "median": med, "std": std,
-        "n_steps": n_steps, "n_rejected": n_rejected,
+        "n_steps": n_steps, "n_rhs_evals": n_rhs_evals,
     }
     with open(RESULTS_FILE, "w") as f:
         json.dump(results, f, indent=2)
@@ -207,9 +206,9 @@ def run_framework(name, bench_fn):
     for N in SIZES:
         result = bench_fn(N)
         if result[0] is not None:
-            med, std, n_steps, n_rej = result
-            save_result(name, N, med, std, n_steps, n_rej)
-            print(f"    N={N:>5}: {med:.4f}s +/- {std:.4f}s  ({n_steps} steps, {n_rej} rej/evals)")
+            med, std, n_steps, n_rhs = result
+            save_result(name, N, med, std, n_steps, n_rhs)
+            print(f"    N={N:>5}: {med:.4f}s +/- {std:.4f}s  ({n_steps} steps, {n_rhs} RHS evals)")
         else:
             print(f"    N={N:>5}: unavailable")
 

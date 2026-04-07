@@ -1,4 +1,4 @@
-"""Adaptive step-size control (PI controller)."""
+"""Adaptive step-size control following Hairer, Norsett & Wanner."""
 
 import mlx.core as mx
 
@@ -15,20 +15,21 @@ def propose_step(
     atol: float,
     rtol: float,
     y: mx.array,
+    y_new: mx.array,
     safety: float = 0.9,
     min_factor: float = 0.2,
     max_factor: float = 10.0,
 ) -> tuple[bool, mx.array]:
     """Decide whether to accept and propose next step size.
 
-    Uses standard error control from Hairer, Norsett & Wanner.
+    Error is scaled by atol + rtol * max(|y|, |y_new|) following the standard
+    mixed error test (Hairer, Norsett & Wanner, Solving ODEs I, Sec. II.4).
 
     Returns:
         (accept, dt_next)
     """
-    scale = atol + rtol * mx.abs(y)
+    scale = atol + rtol * mx.maximum(mx.abs(y), mx.abs(y_new))
     err = error_norm(error / scale)
-    # Avoid division by zero
     err = mx.maximum(err, mx.array(1e-10))
 
     exponent = 1.0 / (order + 1)
