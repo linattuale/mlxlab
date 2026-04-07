@@ -157,6 +157,7 @@ def cond(a: mx.array, p=None) -> mx.array:
     s = mx.linalg.svd(a, compute_uv=False, stream=mx.cpu)
     mx.eval(s)
     s_min = float(s[-1].item())
-    if s_min < 1e-30:
+    s_max = float(s[0].item()) if s.shape[0] > 0 else 1.0
+    if _is_singular(s, max(a.shape[-2], a.shape[-1])):
         return mx.array(float("inf"))
-    return mx.array(float(s[0].item()) / s_min)
+    return mx.array(s_max / s_min)
