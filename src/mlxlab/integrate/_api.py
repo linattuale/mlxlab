@@ -184,8 +184,8 @@ def _solve_sde(solver, f, y0, t0, t1, dt, diffusion, saveat):
     if dt is None:
         raise ValueError("EulerMaruyama requires dt.")
 
-    n_steps_total = round((t1 - t0) / dt)
-    actual_dt = (t1 - t0) / n_steps_total  # avoid float accumulation drift
+    import math
+    n_steps_total = math.ceil((t1 - t0) / dt)
 
     t = t0
     y = y0
@@ -193,9 +193,10 @@ def _solve_sde(solver, f, y0, t0, t1, dt, diffusion, saveat):
     ys = [y]
 
     for i in range(n_steps_total):
-        y, _ = solver.step(f, mx.array(t), y, mx.array(actual_dt), diffusion=diffusion)
+        step_dt = min(dt, t1 - t)  # last step may be shorter
+        y, _ = solver.step(f, mx.array(t), y, mx.array(step_dt), diffusion=diffusion)
         mx.eval(y)
-        t = t0 + (i + 1) * actual_dt  # exact time, no accumulation
+        t = min(t0 + (i + 1) * dt, t1)  # exact, no accumulation, clamped
         ts.append(mx.array(t))
         ys.append(y)
 
