@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mlxlab"
+version = "0.1.0"
+description = "Scientific computing on Apple Silicon with MLX"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [{ name = "Sandro Romani" }]
+keywords = ["mlx", "apple-silicon", "scientific-computing", "ode", "gpu"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Operating System :: MacOS",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = ["mlx>=0.20.0"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.4", "scipy>=1.12,<1.17", "numpy<2.4"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mlxlab"]
+
+[tool.ruff]
+line-length = 99
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
