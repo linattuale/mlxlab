@@ -69,25 +69,41 @@ def _solve_fixed(solver, f, y0, t0, t1, dt, saveat):
     if dt is None:
         raise ValueError(f"{solver.__class__.__name__} requires dt.")
 
+    n_steps_total = int((t1 - t0) / dt)
+    last_dt = (t1 - t0) - n_steps_total * dt
+    if last_dt > 1e-12:
+        n_steps_total += 1
+
+    dt_arr = mx.array(dt)
+
+    # Compile a single step: eliminates graph tracing overhead per iteration
+    @mx.compile
+    def compiled_step(y, t_arr):
+        y_new, _ = solver.step(f, t_arr, y, dt_arr)
+        return y_new
+
     t = t0
     y = y0
     ts = [mx.array(t)]
     ys = [y]
-    n_steps = 0
 
-    while t < t1:
+    for i in range(n_steps_total):
         step_dt = min(dt, t1 - t)
-        y, _ = solver.step(f, mx.array(t), y, mx.array(step_dt))
+        if abs(step_dt - dt) > 1e-12:
+            # Last fractional step — can't use compiled version (different dt)
+            y, _ = solver.step(f, mx.array(t), y, mx.array(step_dt))
+        else:
+            y = compiled_step(y, mx.array(t))
+
         mx.eval(y)
         t += step_dt
-        n_steps += 1
         ts.append(mx.array(t))
         ys.append(y)
 
     sol = Solution(
         t=mx.stack(ts),
         y=mx.stack(ys),
-        stats={"n_steps": n_steps},
+        stats={"n_steps": n_steps_total},
     )
 
     if saveat is not None:
