@@ -1,12 +1,11 @@
 """Benchmark: Dormand-Prince 5(4) across all frameworks.
 
-Same algorithm, same tolerances, same problem.
-Solves dy/dt = (-y + tanh(W @ y + b)) / tau  (rate network)
+Same algorithm, same tolerances, same problem (chaotic rate network, b=0, g=1.5).
 
 Usage:
     uv run python bench_dp5.py mlxlab
+    uv run python bench_dp5.py mlxlab_cpu
     uv run python bench_dp5.py scipy
-    uv run python bench_dp5.py numpy
     uv run python bench_dp5.py torchdiffeq
     uv run python bench_dp5.py all
     uv run python bench_dp5.py plot
@@ -19,10 +18,10 @@ from pathlib import Path
 
 import numpy as np
 
-SIZES = [500, 1000, 2000, 4000, 8000]
+SIZES = [500, 1000, 2000, 4000, 8000, 16000, 32000]
 T_SPAN = (0.0, 1.0)
 TAU = 0.01
-GAIN = 1.5  # chaotic regime (>1)
+GAIN = 1.5  # chaotic regime (>1, Sompolinsky threshold at g=1 for b=0, N->inf)
 RTOL = 1e-4
 ATOL = 1e-6
 N_WARMUP = 1
@@ -33,9 +32,8 @@ RESULTS_FILE = Path(__file__).parent / "results_dp5.json"
 def make_system_np(N, seed=42):
     rng = np.random.default_rng(seed)
     W = rng.normal(size=(N, N)).astype(np.float32) * (GAIN / N**0.5)
-    b = rng.normal(size=(N,)).astype(np.float32)
     y0 = rng.normal(size=(N,)).astype(np.float32) * 0.1
-    return W, b, y0
+    return W, y0  # b=0
 
 
 def time_fn(fn, n_warmup=N_WARMUP, n_runs=N_RUNS):
@@ -58,13 +56,12 @@ def bench_mlxlab(N):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
     import mlxlab as ml
 
-    W_np, b_np, y0_np = make_system_np(N)
+    W_np, y0_np = make_system_np(N)
     W = mx.array(W_np)
-    b = mx.array(b_np)
     y0 = mx.array(y0_np)
 
     def rhs(y, t):
-        return (-y + mx.tanh(W @ y + b)) / TAU
+        return (-y + mx.tanh(W @ y)) / TAU
 
     def run():
         sol = ml.integrate.solve(rhs, y0, t_span=T_SPAN, method="dopri5",
@@ -72,7 +69,13 @@ def bench_mlxlab(N):
         mx.eval(sol.y)
         return sol
 
-    return time_fn(run)
+    # Get step count from one run
+    sol = run()
+    n_steps = sol.stats["n_steps"]
+    n_rejected = sol.stats.get("n_rejected", 0)
+
+    med, std = time_fn(run)
+    return med, std, n_steps, n_rejected
 
 
 # --------------------------------------------------------------------------- #
@@ -84,14 +87,13 @@ def bench_mlxlab_cpu(N):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
     import mlxlab as ml
 
-    W_np, b_np, y0_np = make_system_np(N)
+    W_np, y0_np = make_system_np(N)
     mx.set_default_device(mx.cpu)
     W = mx.array(W_np)
-    b = mx.array(b_np)
     y0 = mx.array(y0_np)
 
     def rhs(y, t):
-        return (-y + mx.tanh(W @ y + b)) / TAU
+        return (-y + mx.tanh(W @ y)) / TAU
 
     def run():
         sol = ml.integrate.solve(rhs, y0, t_span=T_SPAN, method="dopri5",
@@ -99,9 +101,13 @@ def bench_mlxlab_cpu(N):
         mx.eval(sol.y)
         return sol
 
+    sol = run()
+    n_steps = sol.stats["n_steps"]
+    n_rejected = sol.stats.get("n_rejected", 0)
+
     med, std = time_fn(run)
     mx.set_default_device(mx.gpu)
-    return med, std
+    return med, std, n_steps, n_rejected
 
 
 # --------------------------------------------------------------------------- #
@@ -111,20 +117,26 @@ def bench_mlxlab_cpu(N):
 def bench_scipy(N):
     from scipy.integrate import solve_ivp
 
-    W, b, y0 = make_system_np(N)
+    W, y0 = make_system_np(N)
 
     def rhs(t, y):
-        return (-y + np.tanh(W @ y + b)) / TAU
+        return (-y + np.tanh(W @ y)) / TAU
 
     def run():
         return solve_ivp(rhs, T_SPAN, y0, method="RK45",
                          rtol=RTOL, atol=ATOL)
 
-    return time_fn(run)
+    sol = run()
+    # SciPy: sol.t has one entry per accepted step + initial
+    n_steps = sol.t.shape[0] - 1
+    n_rejected = sol.nfev  # total RHS evals (includes rejected)
+
+    med, std = time_fn(run)
+    return med, std, n_steps, n_rejected
 
 
 # --------------------------------------------------------------------------- #
-# torchdiffeq dopri5 (MPS GPU)
+# torchdiffeq dopri5 (MPS GPU) — save all steps
 # --------------------------------------------------------------------------- #
 
 def bench_torchdiffeq(N):
@@ -132,28 +144,40 @@ def bench_torchdiffeq(N):
     from torchdiffeq import odeint
 
     if not torch.backends.mps.is_available():
-        return None, None
+        return None, None, None, None
 
-    W_np, b_np, y0_np = make_system_np(N)
+    W_np, y0_np = make_system_np(N)
     device = torch.device("mps")
     W = torch.tensor(W_np, device=device)
-    b = torch.tensor(b_np, device=device)
     y0 = torch.tensor(y0_np, device=device)
-    t_eval = torch.tensor([T_SPAN[0], T_SPAN[1]], device=device)
+
+    rhs_count = [0]
 
     class RHS(torch.nn.Module):
         def forward(self, t, y):
-            return (-y + torch.tanh(W @ y + b)) / TAU
+            rhs_count[0] += 1
+            return (-y + torch.tanh(W @ y)) / TAU
 
     func = RHS()
 
     def run():
+        # torchdiffeq saves at the requested t points
+        # Use many points to force saving a dense trajectory
+        t_eval = torch.linspace(T_SPAN[0], T_SPAN[1], 1001, device=device)
         sol = odeint(func, y0, t_eval, method="dopri5", rtol=RTOL, atol=ATOL,
                      options={"dtype": torch.float32})
         torch.mps.synchronize()
         return sol
 
-    return time_fn(run)
+    # Count RHS evals on one run
+    rhs_count[0] = 0
+    sol = run()
+    n_rhs_evals = rhs_count[0]
+    # DP5 FSAL: ~6 evals per accepted step + 6 per rejected
+    n_steps_approx = n_rhs_evals // 6
+
+    med, std = time_fn(run)
+    return med, std, n_steps_approx, n_rhs_evals
 
 
 # --------------------------------------------------------------------------- #
@@ -167,21 +191,25 @@ def load_results():
     return {}
 
 
-def save_result(framework, N, med, std):
+def save_result(framework, N, med, std, n_steps, n_rejected):
     results = load_results()
-    results.setdefault(framework, {})[str(N)] = {"median": med, "std": std}
+    results.setdefault(framework, {})[str(N)] = {
+        "median": med, "std": std,
+        "n_steps": n_steps, "n_rejected": n_rejected,
+    }
     with open(RESULTS_FILE, "w") as f:
         json.dump(results, f, indent=2)
 
 
 def run_framework(name, bench_fn):
     print(f"\n  {name}")
-    print(f"  {'-'*50}")
+    print(f"  {'-'*56}")
     for N in SIZES:
-        med, std = bench_fn(N)
-        if med is not None:
-            save_result(name, N, med, std)
-            print(f"    N={N:>5}: {med:.4f}s +/- {std:.4f}s")
+        result = bench_fn(N)
+        if result[0] is not None:
+            med, std, n_steps, n_rej = result
+            save_result(name, N, med, std, n_steps, n_rej)
+            print(f"    N={N:>5}: {med:.4f}s +/- {std:.4f}s  ({n_steps} steps, {n_rej} rej/evals)")
         else:
             print(f"    N={N:>5}: unavailable")
 
@@ -200,7 +228,7 @@ def make_plot():
         print("No results found. Run benchmarks first.")
         return
 
-    fig, ax = plt.subplots(1, 1, figsize=(9, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     styles = {
         "mlxlab": {"color": "#FF6B00", "marker": "o", "linewidth": 2.5, "zorder": 10},
@@ -215,30 +243,51 @@ def make_plot():
     labels = {
         "mlxlab": "mlxlab dopri5 (MLX GPU)",
         "mlxlab_cpu": "mlxlab dopri5 (MLX CPU)",
-        "scipy": "SciPy RK45 (CPU)",
+        "scipy": "SciPy RK45 (CPU, f64)",
         "torchdiffeq": "torchdiffeq dopri5 (MPS)",
         "julia": "Julia DP5 (CPU)",
-        "matlab": "MATLAB ode45 (CPU)",
+        "matlab": "MATLAB ode45 (CPU, f64)",
     }
 
+    # Left: wall time
     for framework, data in results.items():
         sizes = sorted(int(k) for k in data.keys())
         times = [data[str(n)]["median"] for n in sizes]
         stds = [data[str(n)]["std"] for n in sizes]
         style = styles.get(framework, {"color": "gray", "marker": "x", "linewidth": 1})
         label = labels.get(framework, framework)
-        ax.errorbar(sizes, times, yerr=stds, label=label,
-                    markersize=7, capsize=3, **style)
+        ax1.errorbar(sizes, times, yerr=stds, label=label,
+                     markersize=7, capsize=3, **style)
 
-    ax.set_xlabel("System size N (N×N weight matrix)", fontsize=12)
-    ax.set_ylabel("Wall time (seconds)", fontsize=12)
-    ax.set_title("Dormand-Prince 5(4) · rate network · rtol=1e-4 · M5 Max", fontsize=13)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.legend(fontsize=10, loc="upper left")
-    ax.grid(True, alpha=0.3, which="both")
-    ax.set_xticks(SIZES)
-    ax.set_xticklabels([str(n) for n in SIZES])
+    ax1.set_xlabel("System size N", fontsize=12)
+    ax1.set_ylabel("Wall time (seconds)", fontsize=12)
+    ax1.set_title("Wall time", fontsize=13)
+    ax1.set_xscale("log")
+    ax1.set_yscale("log")
+    ax1.legend(fontsize=9, loc="upper left")
+    ax1.grid(True, alpha=0.3, which="both")
+
+    # Right: step counts
+    for framework, data in results.items():
+        sizes = sorted(int(k) for k in data.keys())
+        steps = [data[str(n)].get("n_steps", 0) for n in sizes]
+        if any(s > 0 for s in steps):
+            style = {k: v for k, v in styles.get(framework, {}).items()
+                     if k not in ("linewidth", "zorder")}
+            style["linewidth"] = 1.5
+            label = labels.get(framework, framework)
+            ax2.plot(sizes, steps, label=label, markersize=7, **style)
+
+    ax2.set_xlabel("System size N", fontsize=12)
+    ax2.set_ylabel("Adaptive steps", fontsize=12)
+    ax2.set_title("Step count", fontsize=13)
+    ax2.set_xscale("log")
+    ax2.legend(fontsize=9, loc="upper left")
+    ax2.grid(True, alpha=0.3, which="both")
+
+    fig.suptitle("Dormand-Prince 5(4) · chaotic rate network (g=1.5, b=0) · M5 Max",
+                 fontsize=14, y=1.02)
+    fig.tight_layout()
 
     out = Path(__file__).parent / "bench_dp5.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
