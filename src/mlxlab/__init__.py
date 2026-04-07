@@ -1,7 +1,9 @@
 """mlxlab — Scientific computing on Apple Silicon with MLX."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from . import integrate
+from . import linalg
+from . import signal
 
-__all__ = ["integrate"]
+__all__ = ["integrate", "linalg", "signal"]
