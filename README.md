@@ -8,6 +8,18 @@ Scientific computing on Apple Silicon with [MLX](https://github.com/ml-explore/m
 uv add mlxlab
 ```
 
+## Status
+
+`mlxlab` is alpha software.
+
+- Best-supported module today: `mlxlab.integrate`
+- Target platform: Apple Silicon + MLX
+- `mlxlab.linalg` currently relies on MLX 0.31 CPU-only decompositions
+- `mlxlab.signal` and `mlxlab.random` are early convenience modules, not full SciPy/NumPy replacements
+
+See [CHANGELOG.md](CHANGELOG.md), [ROADMAP.md](ROADMAP.md), and
+[CONTRIBUTING.md](CONTRIBUTING.md) for project status and contribution guidance.
+
 ## Quick Start
 
 ```python
@@ -27,8 +39,9 @@ print(sol.y[-1])  # ~ exp(-5) = 0.006738
 ## Why mlxlab?
 
 MLX gives you GPU-accelerated array operations on Apple Silicon. mlxlab builds
-scientific computing tools on top -- starting with ODE/SDE solvers where the
-expensive right-hand side (matrix-vector multiplies) runs on the GPU.
+scientific computing tools on top -- with ODE/SDE solvers as the flagship
+module, plus a small set of linalg, signal, and random utilities that MLX
+doesn't ship directly.
 
 ```python
 # 10,000-neuron rate network -- the W @ r hits the GPU automatically

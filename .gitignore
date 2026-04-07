@@ -1,9 +1,11 @@
 .venv/
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.egg-info/
 dist/
 build/
+.pytest_cache/
 .ipynb_checkpoints/
 .idea/
 .vscode/
@@ -12,3 +14,7 @@ build/
 .env
 .env.local
 uv.lock
+uv 2.lock
+benchmarks/uv 2.lock
+benchmarks/.venv/
+codex_review*.md
