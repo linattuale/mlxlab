@@ -182,6 +182,15 @@ internally to ensure independence across draws).
 - **Dense output** -- continuous interpolation between solver steps.
 - **GPU linalg** -- when MLX ships GPU decompositions.
 
+## Acknowledgments
+
+Built by [@linattuale](https://github.com/linattuale) with
+[Claude Opus 4.6 (1M context)](https://claude.ai/claude-code) for implementation,
+benchmarking, and iteration. Code review, correctness auditing, and repo hygiene by
+[OpenAI GPT-5.4 Codex](https://chatgpt.com/codex) — whose two thorough review passes
+caught critical bugs (PRNG key reuse, singular matrix handling, PSD normalization)
+and significantly improved the library's reliability before public release.
+
 ## License
 
 MIT
