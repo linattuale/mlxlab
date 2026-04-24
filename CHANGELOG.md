@@ -20,8 +20,19 @@ hardens.
   advances
 - Vectorize `welch`, `spectrogram`, and `saveat` interpolation to avoid serial Python window/index
   loops
+- `_solve_fixed` now reconstructs output `t` as `t0 + i * dt` rather than accumulating via
+  repeated `t += dt`, eliminating floating-point drift in reported times
+- `psd`, `welch`, and `spectrogram` now reject non-1-D input explicitly instead of producing
+  silently malformed results
 - Document MLX ecosystem assumptions as of Apr 24, 2026, including M5, Metal 4,
   Neural Accelerator, and CUDA-backend caveats
+
+### Notes
+
+- SDE trajectories under `method="euler_maruyama"` will not be bit-identical to 0.1.1 for the
+  same seed once `n_steps >= 16`: chunked integration batches the noise draws as a single
+  `mx.random.normal((16,) + y.shape)` per chunk instead of one draw per step, which reorders
+  the PRNG stream. Distributional properties are unchanged.
 
 ## [0.1.1] - 2026-04-07
 

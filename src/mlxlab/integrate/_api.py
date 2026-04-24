@@ -12,6 +12,9 @@ from ._stepsize import propose_step_array
 from ._solution import Solution
 from ._precision import wrap_rhs_dtype
 
+# Unroll factor for compiled fixed-step chunks. 16 balances graph-trace amortization
+# against compiled-graph size; smaller values leave dispatch overhead, larger values
+# bloat the traced graph without measured benefit on M5.
 _FIXED_CHUNK_SIZE = 16
 
 _SOLVERS: dict[str, type[AbstractSolver]] = {
@@ -242,6 +245,9 @@ def _solve_sde(solver, f, y0, t0, t1, dt, diffusion, saveat):
                 ys_chunk.append(y)
             return y, mx.stack(ys_chunk)
     else:
+        # Keep this Euler-Maruyama update in sync with EulerMaruyama.step in
+        # _stochastic.py — the chunked path inlines the math for compilation
+        # and will not pick up changes to solver.step.
         @mx.compile
         def compiled_chunk(y, t_arr, dws):
             ys_chunk = []
