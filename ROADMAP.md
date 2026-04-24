@@ -7,9 +7,11 @@ This roadmap is intentionally opinionated: it reflects what would most improve
 
 ### 1. Compiled integration loop
 
-The biggest current performance limitation is the Python-level stepping loop in
-`mlxlab.integrate`. Moving more of the adaptive stepping logic into compiled MLX
-would improve small and medium problem sizes significantly.
+The biggest remaining performance limitation is the Python-level accept/reject
+loop in adaptive `mlxlab.integrate` solvers. Fixed-step solvers now run in
+compiled chunks, and adaptive trial steps compile the RHS, error estimate, and
+step-size decision. The next step is a fully compiled adaptive loop that can
+record accepted states without returning to Python on every trial.
 
 ### 2. More examples and user-facing docs
 

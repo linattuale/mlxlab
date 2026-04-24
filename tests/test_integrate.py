@@ -6,7 +6,6 @@ import pytest
 from scipy.integrate import solve_ivp
 
 import mlxlab as ml
-from mlxlab.integrate import Solution
 
 
 # ---- Helpers ----------------------------------------------------------------

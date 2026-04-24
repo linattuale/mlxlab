@@ -28,14 +28,33 @@ def propose_step(
     Returns:
         (accept, dt_next)
     """
+    accept, dt_next = propose_step_array(
+        dt, error, order, atol, rtol, y, y_new, safety, min_factor, max_factor
+    )
+    return bool(accept.item()), dt_next
+
+
+def propose_step_array(
+    dt: mx.array,
+    error: mx.array,
+    order: int,
+    atol: float,
+    rtol: float,
+    y: mx.array,
+    y_new: mx.array,
+    safety: float = 0.9,
+    min_factor: float = 0.2,
+    max_factor: float = 10.0,
+) -> tuple[mx.array, mx.array]:
+    """Array-valued adaptive step proposal suitable for compiled solver trials."""
     scale = atol + rtol * mx.maximum(mx.abs(y), mx.abs(y_new))
     err = error_norm(error / scale)
     err = mx.maximum(err, mx.array(1e-10))
 
     exponent = 1.0 / (order + 1)
     factor = safety * (1.0 / err) ** exponent
-    factor = float(mx.clip(factor, mx.array(min_factor), mx.array(max_factor)).item())
+    factor = mx.clip(factor, mx.array(min_factor), mx.array(max_factor))
 
-    accept = float(err.item()) <= 1.0
-    dt_next = mx.array(float(dt.item()) * factor)
+    accept = err <= 1.0
+    dt_next = dt * factor
     return accept, dt_next

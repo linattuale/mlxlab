@@ -1,7 +1,5 @@
 """Fixed-step solvers: Euler, RK4."""
 
-import mlx.core as mx
-
 from ._base import AbstractSolver
 
 

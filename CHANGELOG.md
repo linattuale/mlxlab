@@ -7,7 +7,14 @@ hardens.
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Changed
+
+- Require `mlx>=0.31.1` so supported installs include the current M5-tuned MLX runtime line
+- Chunk fixed-step ODE and SDE integration into compiled MLX blocks to reduce per-step dispatch
+- Compile adaptive RK trial steps and step-size decisions so Python only observes accepted time
+  advances
+- Vectorize `welch`, `spectrogram`, and `saveat` interpolation to avoid serial Python window/index
+  loops
 
 ## [0.1.1] - 2026-04-07
 

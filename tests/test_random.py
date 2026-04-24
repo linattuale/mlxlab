@@ -6,7 +6,6 @@ Uses large sample sizes (10000+) for tight estimates.
 
 import mlx.core as mx
 import numpy as np
-import math
 import pytest
 
 import mlxlab as ml

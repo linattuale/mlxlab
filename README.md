@@ -14,6 +14,7 @@ uv add mlxlab
 
 - Best-supported module today: `mlxlab.integrate`
 - Target platform: Apple Silicon + MLX
+- Requires `mlx>=0.31.1` for the current M5-tuned MLX runtime line
 - `mlxlab.linalg` currently relies on MLX 0.31 CPU-only decompositions
 - `mlxlab.signal` and `mlxlab.random` are early convenience modules, not full SciPy/NumPy replacements
 
@@ -93,7 +94,8 @@ M5 Max (40 GPU cores, 128 GB).
   faster than MATLAB, 12.5x faster than SciPy.
 - **N=32000: mlxlab GPU is 3.3x faster than Julia, 1.6x faster than torchdiffeq.**
 - **N < 1000: Julia wins** due to compiled language with zero per-step dispatch
-  overhead. mlxlab's ~0.12s floor comes from `mx.eval()` calls in the Python loop.
+  overhead. mlxlab's remaining small-N floor comes from adaptive accept/reject
+  bookkeeping that still crosses the Python boundary once per trial.
 - **Step counts are consistent** across frameworks: ~140-180 steps for float32
   solvers, ~300-350 for float64 (SciPy/MATLAB), confirming the same algorithm
   is being solved.
@@ -172,9 +174,10 @@ internally to ensure independence across draws).
 
 ## Roadmap (v0.2)
 
-- **Compiled integration loop** -- push the time-stepping loop into compiled MLX to
-  eliminate per-step Python/`mx.eval()` overhead. This is the main bottleneck at
-  small N (the ~0.12s floor) and would extend mlxlab's advantage to smaller systems.
+- **Compiled integration loop** -- fixed-step solvers now run in compiled chunks,
+  and adaptive trial steps compile the RHS plus step-size decision. The remaining
+  bottleneck is the adaptive accept/reject loop crossing into Python once per
+  trial; eliminating that would extend mlxlab's advantage to smaller systems.
 - **Sparse matrices** -- no MLX foundation exists yet; major undertaking.
 - **Implicit/stiff solvers** -- BDF, SDIRK methods for stiff systems.
 - **Special functions** -- bessel, gamma function (may need custom Metal kernels).

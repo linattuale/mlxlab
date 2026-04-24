@@ -16,7 +16,7 @@ classifiers = [
     "Operating System :: MacOS",
     "Topic :: Scientific/Engineering",
 ]
-dependencies = ["mlx>=0.20.0"]
+dependencies = ["mlx>=0.31.1"]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.4", "scipy>=1.12,<1.17", "numpy<2.4"]

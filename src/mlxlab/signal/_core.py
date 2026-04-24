@@ -3,6 +3,11 @@
 import mlx.core as mx
 
 
+def _validate_1d(x: mx.array, name: str):
+    if x.ndim != 1:
+        raise ValueError(f"{name} expects a 1-D array, got shape {x.shape}.")
+
+
 def fftfreq(n: int, d: float = 1.0) -> mx.array:
     """Discrete Fourier transform sample frequencies.
 
@@ -16,7 +21,6 @@ def fftfreq(n: int, d: float = 1.0) -> mx.array:
         Array of length n with frequencies: [0, 1, ..., n/2-1, -n/2, ..., -1] / (d*n)
     """
     val = 1.0 / (n * d)
-    results = mx.zeros((n,))
     N = (n - 1) // 2 + 1
     p1 = mx.arange(0, N)
     p2 = mx.arange(-(n // 2), 0)
@@ -43,8 +47,38 @@ def rfftfreq(n: int, d: float = 1.0) -> mx.array:
 
 def _hann_window(n: int) -> mx.array:
     """Hann window."""
+    if n == 1:
+        return mx.ones((1,))
     i = mx.arange(n)
     return 0.5 * (1.0 - mx.cos(2.0 * 3.141592653589793 * i / (n - 1)))
+
+
+def _windowed_segments(x: mx.array, nperseg: int, step: int, n_segments: int) -> mx.array:
+    """Return a strided (n_segments, nperseg) view over a 1-D signal."""
+    x = mx.contiguous(x)
+    return mx.as_strided(x, shape=(n_segments, nperseg), strides=(step, 1))
+
+
+def _periodogram(x: mx.array, fs: float, window: bool) -> mx.array:
+    """One-sided periodogram over the last axis; supports batched input."""
+    n = x.shape[-1]
+    if window:
+        w = _hann_window(n)
+        x = x * w
+        s2 = mx.sum(w * w)
+    else:
+        s2 = mx.array(float(n))
+
+    X = mx.fft.rfft(x, axis=-1)
+    power = (mx.real(X) ** 2 + mx.imag(X) ** 2) / (fs * s2)
+    power = power * 2.0
+
+    if n % 2 == 0:
+        return mx.concatenate(
+            [power[..., :1] / 2.0, power[..., 1:-1], power[..., -1:] / 2.0],
+            axis=-1,
+        )
+    return mx.concatenate([power[..., :1] / 2.0, power[..., 1:]], axis=-1)
 
 
 def psd(x: mx.array, fs: float = 1.0, window: bool = True) -> tuple[mx.array, mx.array]:
@@ -59,28 +93,10 @@ def psd(x: mx.array, fs: float = 1.0, window: bool = True) -> tuple[mx.array, mx
         (freqs, power) where freqs has length n//2+1 and power is the
         one-sided PSD in units^2/Hz.
     """
+    _validate_1d(x, "psd")
     n = x.shape[0]
-    if window:
-        w = _hann_window(n)
-        x = x * w
-        # Correct for window power
-        S1 = float(mx.sum(w).item())
-        S2 = float(mx.sum(w * w).item())
-    else:
-        S2 = float(n)
-
-    X = mx.fft.rfft(x)
-    power = (mx.real(X) ** 2 + mx.imag(X) ** 2) / (fs * S2)
-    # Double one-sided (except DC, and Nyquist only for even-length signals)
-    power = power * 2.0
-    if n % 2 == 0:
-        # Even: DC at [0], Nyquist at [-1] — don't double either
-        power = mx.concatenate([power[:1] / 2.0, power[1:-1], power[-1:] / 2.0])
-    else:
-        # Odd: DC at [0] only — no Nyquist bin
-        power = mx.concatenate([power[:1] / 2.0, power[1:]])
-
     freqs = rfftfreq(n, d=1.0 / fs)
+    power = _periodogram(x, fs=fs, window=window)
     return freqs, power
 
 
@@ -101,6 +117,7 @@ def welch(
     Returns:
         (freqs, psd_estimate) averaged over segments.
     """
+    _validate_1d(x, "welch")
     if nperseg <= 0:
         raise ValueError(f"nperseg must be > 0, got {nperseg}")
     if noverlap is None:
@@ -116,15 +133,10 @@ def welch(
     if n_segments < 1:
         return psd(x, fs=fs, window=True)
 
-    power_sum = mx.zeros((nperseg // 2 + 1,))
-    for i in range(n_segments):
-        start = i * step
-        segment = x[start : start + nperseg]
-        _, p = psd(segment, fs=fs, window=True)
-        power_sum = power_sum + p
-
+    segments = _windowed_segments(x, nperseg, step, n_segments)
+    powers = _periodogram(segments, fs=fs, window=True)
     freqs = rfftfreq(nperseg, d=1.0 / fs)
-    return freqs, power_sum / n_segments
+    return freqs, mx.mean(powers, axis=0)
 
 
 def spectrogram(
@@ -144,6 +156,7 @@ def spectrogram(
     Returns:
         (times, freqs, Sxx) where Sxx has shape (n_segments, n_freqs).
     """
+    _validate_1d(x, "spectrogram")
     if nperseg <= 0:
         raise ValueError(f"nperseg must be > 0, got {nperseg}")
     if noverlap is None:
@@ -157,17 +170,7 @@ def spectrogram(
     n_segments = (x.shape[0] - nperseg) // step + 1
 
     freqs = rfftfreq(nperseg, d=1.0 / fs)
-    n_freqs = freqs.shape[0]
-
-    segments = []
-    times_list = []
-    for i in range(n_segments):
-        start = i * step
-        segment = x[start : start + nperseg]
-        _, p = psd(segment, fs=fs, window=True)
-        segments.append(p)
-        times_list.append((start + nperseg / 2) / fs)
-
-    Sxx = mx.stack(segments)
-    times = mx.array(times_list)
+    segments = _windowed_segments(x, nperseg, step, n_segments)
+    Sxx = _periodogram(segments, fs=fs, window=True)
+    times = (mx.arange(n_segments) * step + nperseg / 2) / fs
     return times, freqs, Sxx
