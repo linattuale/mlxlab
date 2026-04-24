@@ -21,6 +21,23 @@ uv add mlxlab
 See [CHANGELOG.md](CHANGELOG.md), [ROADMAP.md](ROADMAP.md), and
 [CONTRIBUTING.md](CONTRIBUTING.md) for project status and contribution guidance.
 
+## MLX Ecosystem Notes (as of Apr 24, 2026)
+
+- MLX does not appear to publish a single formal roadmap; the best public signals
+  are release notes, issues, pull requests, and discussions.
+- MLX v0.30 added M5 Neural Accelerator support, and this package now requires
+  `mlx>=0.31.1` to stay on the current M5-tuned runtime line.
+- MLX supports custom Metal kernels via `mx.fast.metal_kernel`, which is the most
+  practical route for fused mlxlab-specific GPU kernels. This is not the same as
+  directly programming M5 Neural Accelerators.
+- Metal 4 machine-learning passes are model/tensor oriented: useful for running
+  Core ML/Metal ML packages on the GPU timeline, but not a drop-in custom kernel
+  route for Python scientific solvers.
+- MLX has a CUDA backend for Linux/NVIDIA (`mlx[cuda12]` or `mlx[cuda13]`) and a
+  custom CUDA-kernel API. `mlxlab` does not currently claim CUDA support or ship
+  CUDA benchmarks; backend coverage for FFT-heavy signal code and LAPACK-style
+  linalg should be validated separately before presenting CUDA results.
+
 ## Quick Start
 
 ```python
@@ -103,6 +120,13 @@ M5 Max (40 GPU cores, 128 GB).
   in double precision). This is disclosed, not corrected -- it reflects the real-world
   experience of switching frameworks. MATLAB's higher step count (~2x) is a
   consequence of float64 error estimation at the same tolerances.
+
+**Current M5 limits:** mlxlab now uses the M5-tuned MLX runtime line and keeps
+more solver/signal work on the GPU, but it is not a direct Metal 4 tensor-kernel
+library. Adaptive solvers still cross into Python once per trial for accept/reject
+bookkeeping, integration matmuls do not yet expose an explicit FP16/BF16 mixed
+precision mode, there is no direct Neural Accelerator programming, and
+`mlxlab.linalg` remains CPU-bound while MLX decompositions are CPU-only.
 
 **Chaos verification:** The system shows chaotic dynamics at all benchmark sizes.
 A 1e-6 perturbation to initial conditions amplifies 43x (N=500), 241x (N=1000),

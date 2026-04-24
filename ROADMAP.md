@@ -3,6 +3,23 @@
 This roadmap is intentionally opinionated: it reflects what would most improve
 `mlxlab` for real users, not just what would add the most surface area.
 
+## External Context (as of Apr 24, 2026)
+
+MLX does not appear to have a single formal public roadmap. For planning,
+`mlxlab` tracks MLX release notes, issues, pull requests, and discussions. The
+important current signals are:
+
+- M5 Neural Accelerator support exists in the MLX v0.30+ runtime line.
+- MLX custom Metal kernels are available through `mx.fast.metal_kernel`, but
+  direct Neural Accelerator programming is not exposed as a normal custom-kernel
+  target.
+- Metal 4 machine-learning passes are model/package oriented, not a direct
+  replacement for MLX array kernels in scientific solvers.
+- MLX has Linux/NVIDIA CUDA packages (`mlx[cuda12]`, `mlx[cuda13]`) and custom
+  CUDA kernels, but `mlxlab` should treat CUDA as unvalidated until its
+  integrate, signal, random, and linalg modules have backend-specific tests and
+  benchmarks.
+
 ## Highest Priority
 
 ### 1. Compiled integration loop
@@ -37,6 +54,13 @@ estimates, step sizes) in FP32 for numerical stability. This could roughly
 double performance at large N where the matmul dominates, without sacrificing
 adaptive stepping accuracy. Could be exposed as a `dtype` parameter or handled
 automatically based on problem size.
+
+### 5. Direct Metal 4 / Neural Accelerator path
+
+mlxlab currently relies on MLX to select the best Metal kernels. It does not
+directly program M5 GPU Neural Accelerators or Metal 4 Tensor APIs. That keeps
+the library simple and Pythonic, but the most hardware-specific M5 gains would
+require either upstream MLX coverage or a lower-level kernel layer.
 
 ## Medium Priority
 

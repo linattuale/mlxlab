@@ -15,6 +15,8 @@ hardens.
   advances
 - Vectorize `welch`, `spectrogram`, and `saveat` interpolation to avoid serial Python window/index
   loops
+- Document MLX ecosystem assumptions as of Apr 24, 2026, including M5, Metal 4,
+  Neural Accelerator, and CUDA-backend caveats
 
 ## [0.1.1] - 2026-04-07
 
