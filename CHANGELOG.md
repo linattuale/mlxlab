@@ -7,6 +7,11 @@ hardens.
 
 ## [Unreleased]
 
+### Added
+
+- Add an opt-in mixed-precision integration path with `solve(..., rhs_dtype=...)`
+  and `integrate.mixed_matmul(...)` for matmul-heavy RHS functions
+
 ### Changed
 
 - Require `mlx>=0.31.1` so supported installs include the current M5-tuned MLX runtime line

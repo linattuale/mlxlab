@@ -10,6 +10,7 @@ from ._adaptive import Tsit5, Dopri5
 from ._stochastic import EulerMaruyama
 from ._stepsize import propose_step_array
 from ._solution import Solution
+from ._precision import wrap_rhs_dtype
 
 _FIXED_CHUNK_SIZE = 16
 
@@ -34,6 +35,7 @@ def solve(
     max_steps: int = 100_000,
     diffusion: Callable | None = None,
     saveat: mx.array | None = None,
+    rhs_dtype=None,
 ) -> Solution:
     """Solve an ODE or SDE initial value problem.
 
@@ -49,6 +51,9 @@ def solve(
         max_steps: Safety limit on number of steps.
         diffusion: Diffusion function g(y, t) for SDEs (euler_maruyama only).
         saveat: Optional sorted time points within [t0, t1] at which to save.
+        rhs_dtype: Optional floating dtype for evaluating ``f``. When set, the
+            solver state remains in ``y0.dtype`` but ``f`` sees ``y`` cast to
+            ``rhs_dtype`` and its derivative is cast back to ``y0.dtype``.
 
     Returns:
         Solution with fields t, y, stats.
@@ -65,6 +70,8 @@ def solve(
         raise ValueError(f"dt must be positive, got {dt}.")
     if saveat is not None:
         _validate_saveat(saveat, t0, t1)
+    if rhs_dtype is not None:
+        f = wrap_rhs_dtype(f, state_dtype=y0.dtype, rhs_dtype=rhs_dtype)
 
     if solver.is_adaptive:
         return _solve_adaptive(solver, f, y0, t0, t1, dt, atol, rtol, max_steps, saveat)

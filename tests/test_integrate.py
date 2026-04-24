@@ -138,6 +138,87 @@ def test_large_matmul_rhs():
     assert norm_final < norm_init, f"Expected decay: {norm_final:.4f} >= {norm_init:.4f}"
 
 
+def test_mixed_matmul_returns_output_dtype():
+    A = mx.array([[1.0, 2.0], [3.0, 4.0]], dtype=mx.float32)
+    x = mx.array([1.0, -1.0], dtype=mx.float32)
+
+    y = ml.integrate.mixed_matmul(A, x, dtype="float16")
+    mx.eval(y)
+
+    assert y.dtype == mx.float32
+    expected = A.astype(mx.float16) @ x.astype(mx.float16)
+    assert float(mx.abs(y - expected.astype(mx.float32)).max().item()) < 1e-6
+
+
+def test_rhs_dtype_keeps_solver_state_float32():
+    sol = ml.integrate.solve(
+        exp_decay,
+        mx.array([1.0], dtype=mx.float32),
+        t_span=(0, 1),
+        dt=0.01,
+        method="rk4",
+        rhs_dtype="float16",
+    )
+
+    assert sol.y.dtype == mx.float32
+    expected = float(mx.exp(mx.array(-1.0)).item())
+    assert_close(sol.y[-1].item(), expected, atol=1e-3, msg="mixed RHS decay")
+
+
+def test_adaptive_rhs_dtype_keeps_solver_state_float32():
+    sol = ml.integrate.solve(
+        exp_decay,
+        mx.array([1.0], dtype=mx.float32),
+        t_span=(0, 3),
+        method="tsit5",
+        rhs_dtype=mx.float16,
+        atol=1e-5,
+        rtol=1e-3,
+    )
+
+    assert sol.y.dtype == mx.float32
+    expected = float(mx.exp(mx.array(-3.0)).item())
+    assert_close(sol.y[-1].item(), expected, atol=2e-3, msg="adaptive mixed RHS decay")
+
+
+def test_mixed_precision_matmul_rhs_path():
+    n = 64
+    mx.random.seed(7)
+    A = mx.random.normal((n, n)) * (0.25 / n**0.5)
+    A = A - 1.5 * mx.eye(n)
+    A16 = A.astype(mx.float16)
+    y0 = mx.random.normal((n,)).astype(mx.float32)
+
+    def rhs(y, t):
+        return ml.integrate.mixed_matmul(A16, y, dtype=mx.float16)
+
+    sol = ml.integrate.solve(
+        rhs,
+        y0,
+        t_span=(0, 0.2),
+        dt=0.01,
+        method="rk4",
+        rhs_dtype=mx.float16,
+    )
+
+    norm_init = float(mx.sqrt((y0 ** 2).sum()).item())
+    norm_final = float(mx.sqrt((sol.y[-1] ** 2).sum()).item())
+    assert sol.y.dtype == mx.float32
+    assert norm_final < norm_init, f"Expected decay: {norm_final:.4f} >= {norm_init:.4f}"
+
+
+def test_rhs_dtype_rejects_nonfloating_dtype():
+    with pytest.raises(ValueError, match="rhs_dtype must be a floating dtype"):
+        ml.integrate.solve(
+            exp_decay,
+            mx.array([1.0]),
+            t_span=(0, 1),
+            dt=0.1,
+            method="rk4",
+            rhs_dtype=mx.int32,
+        )
+
+
 # ---- SDE: Euler-Maruyama (geometric Brownian motion) ------------------------
 
 def test_euler_maruyama_gbm():

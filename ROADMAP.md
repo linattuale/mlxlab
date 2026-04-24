@@ -44,16 +44,17 @@ The next credibility gains are likely to come from:
 - more statistical and keyed-RNG tests for `random`
 - cleaner CI and environment reproducibility for contributors
 
-### 4. Mixed-precision integration (FP16 matmuls)
+### 4. Mixed-precision integration (FP16/BF16 matmuls)
 
 M5 GPU has dedicated matrix multiply hardware that runs FP16 at ~70 TFLOPS —
 much faster than FP32 on general ALUs. The integrate solvers currently run
-everything in FP32. A mixed-precision mode could cast large matmuls (e.g.,
-`W @ r`) to FP16 with FP32 accumulation while keeping solver state (y, error
-estimates, step sizes) in FP32 for numerical stability. This could roughly
-double performance at large N where the matmul dominates, without sacrificing
-adaptive stepping accuracy. Could be exposed as a `dtype` parameter or handled
-automatically based on problem size.
+state, error estimates, and step sizes in FP32 by default, and now expose an
+opt-in `rhs_dtype` path plus `mixed_matmul` helper so matmul-heavy RHS functions
+can run their `W @ r` work through FP16 or BF16 inputs. Remaining work is
+turning the quick N=2000-8000 spot checks into a reproducible benchmark sweep,
+measuring accuracy/performance tradeoffs across large chaotic systems, and
+deciding whether any automatic problem-size heuristics are worth the added API
+complexity.
 
 ### 5. Direct Metal 4 / Neural Accelerator path
 

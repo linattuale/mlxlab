@@ -72,6 +72,29 @@ def network_rhs(r, t):
 sol = ml.integrate.solve(network_rhs, mx.zeros(10000), t_span=(0, 1), dt=0.0001, method="rk4")
 ```
 
+For matmul-heavy systems, keep the solver state and control flow in float32
+while running the dominant `W @ r` multiply through half-precision inputs:
+
+```python
+W16 = W.astype(mx.float16)
+
+def network_rhs_mixed(r, t):
+    Wr = ml.integrate.mixed_matmul(W16, r, dtype=mx.float16, out_dtype=mx.float32)
+    return (-r + mx.tanh(Wr)) / tau
+
+sol = ml.integrate.solve(
+    network_rhs_mixed,
+    mx.zeros(10000),
+    t_span=(0, 1),
+    dt=0.0001,
+    method="rk4",
+)
+```
+
+For RHS functions where all state-dependent work can tolerate lower precision,
+pass `rhs_dtype=mx.float16` or `rhs_dtype=mx.bfloat16` to cast the state view
+seen by `f` as well.
+
 ## Solvers
 
 | Method | Type | Use case |
@@ -121,11 +144,19 @@ M5 Max (40 GPU cores, 128 GB).
   experience of switching frameworks. MATLAB's higher step count (~2x) is a
   consequence of float64 error estimation at the same tolerances.
 
+**Mixed-precision spot check:** The opt-in `mixed_matmul` path is fastest once
+the RHS is dominated by large matrix-vector multiplies. On the same M5 GPU,
+quick local checks of the chaotic rate-network RHS showed fixed-step RK4 at
+1.4x faster for N=2000, 2.3x for N=4000, and 1.9x for N=8000. Adaptive `dopri5`
+with the conservative matmul-only pattern was about break-even at N=2000 and
+roughly 1.5x faster at N=4000 and N=8000. Small systems can be slower, and full
+accuracy/performance sweeps still need to replace these spot checks.
+
 **Current M5 limits:** mlxlab now uses the M5-tuned MLX runtime line and keeps
 more solver/signal work on the GPU, but it is not a direct Metal 4 tensor-kernel
 library. Adaptive solvers still cross into Python once per trial for accept/reject
-bookkeeping, integration matmuls do not yet expose an explicit FP16/BF16 mixed
-precision mode, there is no direct Neural Accelerator programming, and
+bookkeeping, mixed-precision integration is opt-in through `rhs_dtype` and
+`mixed_matmul`, there is no direct Neural Accelerator programming, and
 `mlxlab.linalg` remains CPU-bound while MLX decompositions are CPU-only.
 
 **Chaos verification:** The system shows chaotic dynamics at all benchmark sizes.
